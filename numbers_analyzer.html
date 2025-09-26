@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Аналіз набору чисел — інтерактивна програма</title>
+  <style>
+    :root { --ok: #0b7; --err: #c0392b; --muted:#555; --chip:#eef; --min:#ffe9e9; --max:#e9fff1; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height: 1.45; margin: 32px; }
+    h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    .dev { color: var(--muted); margin-bottom: 18px; }
+    label { font-weight: 600; display:block; margin: 12px 0 6px; }
+    input[type="text"]{ width: min(860px, 100%); padding: 10px 12px; border-radius: 10px; border:1px solid #ccc; font-size: 16px; }
+    .hint{ font-size: 0.95rem; color: var(--muted); margin: 6px 0 14px; }
+    .actions{ margin: 12px 0 16px; display:flex; gap:10px; flex-wrap:wrap; }
+    button{ padding:10px 14px; border:0; border-radius: 10px; cursor:pointer; font-weight:600; }
+    .primary{ background:#2563eb; color:white; }
+    .ghost{ background:#f2f2f2; }
+    .msg{ margin-top: 10px; min-height: 22px; font-weight:600; }
+    .msg.ok{ color: var(--ok); }
+    .msg.err{ color: var(--err); }
+    .results{ margin-top: 16px; display:none; }
+    .card{ border:1px solid #e5e7eb; border-radius: 12px; padding: 14px; max-width: 860px; }
+    .kpis{ display:flex; gap: 18px; flex-wrap:wrap; }
+    .kpi{ background:#fafafa; border-radius: 12px; padding: 12px 14px; border:1px dashed #e5e7eb; min-width: 170px; }
+    .kpi h3{ margin:0 0 6px; font-size: 0.95rem; color:#374151; }
+    .kpi .val{ font-weight:800; font-size: 1.1rem; }
+    .list{ margin-top: 10px; display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{ padding:6px 10px; border-radius: 999px; background: var(--chip); }
+    .chip.min{ background: var(--min); border:1px solid #ffb3b3;}
+    .chip.max{ background: var(--max); border:1px solid #a3f0c4;}
+    footer{ margin-top: 26px; color: var(--muted); }
+    .small{ font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Аналіз набору чисел</h1>
+  <div class="dev">Розробник: Данило Суржанський</div>
+
+  <label for="nums">Введіть рівно 10 чисел (дійсні, роздільник — <b>крапка</b>), через кому. Діапазон кожного числа: 10–1000.</label>
+  <div class="hint">Наприклад: <code>924, 525, 351, 765, 58, 147, 137, 999.5, 956, 961</code></div>
+  <input id="nums" type="text" placeholder="10 значень через кому (напр., 10.5, 23, 99, 1000, ...)" autocomplete="off"/>
+
+  <div class="actions">
+    <button class="primary" id="calcBtn">Розрахувати</button>
+    <button class="ghost" id="clearBtn" type="button">Очистити</button>
+  </div>
+
+  <div id="msg" class="msg" role="status" aria-live="polite"></div>
+
+  <div id="results" class="results">
+    <div class="card">
+      <div class="kpis">
+        <div class="kpi"><h3>Min</h3><div class="val" id="minOut">—</div></div>
+        <div class="kpi"><h3>Max</h3><div class="val" id="maxOut">—</div></div>
+        <div class="kpi"><h3>Average</h3><div class="val" id="avgOut">—</div></div>
+      </div>
+      <div class="list" id="chips"></div>
+    </div>
+  </div>
+
+  <footer class="small">Дані поза межами 10–1000 або неправильний формат не приймаються. Average округлюється до 2 знаків.</footer>
+
+<script>
+  function parseInput(raw){
+    // Split by comma, trim, allow spaces
+    const parts = raw.split(",").map(s => s.trim()).filter(s => s.length > 0);
+    // Validate count
+    if(parts.length !== 10){
+      return { ok:false, error: "Потрібно ввести рівно 10 чисел, розділених комами.", parts };
+    }
+    // Convert to numbers with dot as decimal separator
+    const nums = [];
+    for(const p of parts){
+      // reject if contains letters or uses comma as decimal separator wrongly
+      if(/[^0-9.\-]/.test(p)){ // allow digits, dot, minus
+        return { ok:false, error: `Неправильний формат числа: "${p}". Використовуйте крапку як роздільник.` };
+      }
+      const n = Number(p);
+      if(!isFinite(n)){
+        return { ok:false, error: `Неправильний формат числа: "${p}".` };
+      }
+      if(n < 10 || n > 1000){
+        return { ok:false, error: `Число поза межами 10–1000: "${p}".` };
+      }
+      nums.push(n);
+    }
+    return { ok:true, nums };
+  }
+
+  function analyze(nums){
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const avg = nums.reduce((a,b) => a + b, 0) / nums.length;
+    return { min, max, avg };
+  }
+
+  function renderResults(nums, stats){
+    const msg = document.getElementById("msg");
+    msg.className = "msg ok";
+    msg.textContent = "Готово! Результати нижче.";
+
+    document.getElementById("minOut").textContent = stats.min;
+    document.getElementById("maxOut").textContent = stats.max;
+    document.getElementById("avgOut").textContent = stats.avg.toFixed(2);
+
+    const chips = document.getElementById("chips");
+    chips.innerHTML = "";
+    const min = stats.min;
+    const max = stats.max;
+    nums.forEach((n, i) => {
+      const span = document.createElement("span");
+      span.className = "chip" + (n === min ? " min" : (n === max ? " max" : ""));
+      span.textContent = n;
+      chips.appendChild(span);
+    });
+
+    document.getElementById("results").style.display = "block";
+  }
+
+  function showError(text){
+    const msg = document.getElementById("msg");
+    msg.className = "msg err";
+    msg.textContent = text + " Повторіть введення.";
+    document.getElementById("results").style.display = "none";
+  }
+
+  document.getElementById("calcBtn").addEventListener("click", () => {
+    const raw = document.getElementById("nums").value;
+    const parsed = parseInput(raw);
+    if(!parsed.ok){ showError(parsed.error); return; }
+    const stats = analyze(parsed.nums);
+    renderResults(parsed.nums, stats);
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    document.getElementById("nums").value = "";
+    document.getElementById("results").style.display = "none";
+    const msg = document.getElementById("msg");
+    msg.textContent = "";
+    msg.className = "msg";
+  });
+
+  // Allow Enter key to submit
+  document.getElementById("nums").addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){ document.getElementById("calcBtn").click(); }
+  });
+</script>
+</body>
+</html>
